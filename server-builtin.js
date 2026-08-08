@@ -1,5 +1,7 @@
 const http = require('http');
 const url = require('url');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = 3000;
 
@@ -50,9 +52,45 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // === Stage 0: Hello ===
-  if (pathname === '/' && method === 'GET') {
-    return sendJSON(res, 200, { message: "Hello, server!" });
+  // === Swagger UI ===
+  if (pathname === '/docs' && method === 'GET') {
+    const swaggerHTML = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Task API - Swagger UI</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@3/swagger-ui.css">
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@3/swagger-ui-bundle.js"></script>
+    <script>
+      const ui = SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIBundle.SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout"
+      })
+    </script>
+  </body>
+</html>
+    `;
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(swaggerHTML);
+    return;
+  }
+
+  // === OpenAPI Spec ===
+  if (pathname === '/openapi.json' && method === 'GET') {
+    const openapi = fs.readFileSync(path.join(__dirname, 'openapi.json'), 'utf-8');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(openapi);
+    return;
   }
 
   // === Stage 1: Info & Health ===
