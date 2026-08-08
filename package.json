@@ -1,0 +1,12 @@
+{
+  "name": "task-api",
+  "version": "1.0.0",
+  "description": "A simple CRUD API for managing tasks",
+  "main": "server-builtin.js",
+  "scripts": {
+    "start": "node server-builtin.js"
+  },
+  "keywords": ["crud", "api", "tasks"],
+  "author": "",
+  "license": "ISC"
+}
