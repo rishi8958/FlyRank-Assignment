@@ -7,3 +7,4 @@ dist/
 build/
 *.swp
 *.swo
+tasks.db
