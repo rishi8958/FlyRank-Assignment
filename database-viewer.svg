@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+  <rect x="40" y="40" width="880" height="460" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="70" y="80" width="220" height="36" rx="8" fill="#0f172a"/>
+  <text x="90" y="104" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#ffffff">DB Browser for SQLite</text>
+  <rect x="70" y="140" width="220" height="300" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <rect x="320" y="140" width="560" height="300" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="90" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#475569">Tables</text>
+  <rect x="90" y="190" width="180" height="36" rx="8" fill="#e2e8f0"/>
+  <text x="108" y="214" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#0f172a">tasks</text>
+  <rect x="90" y="236" width="180" height="36" rx="8" fill="#f8fafc"/>
+  <text x="108" y="260" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#64748b">sqlite_sequence</text>
+  <text x="340" y="172" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#475569">SELECT * FROM tasks;</text>
+  <rect x="340" y="188" width="500" height="220" rx="10" fill="#0f172a"/>
+  <text x="360" y="220" font-family="Consolas, monospace" font-size="16" fill="#e2e8f0">id | title           | done</text>
+  <text x="360" y="248" font-family="Consolas, monospace" font-size="16" fill="#e2e8f0">1  | Buy milk        | 0</text>
+  <text x="360" y="276" font-family="Consolas, monospace" font-size="16" fill="#e2e8f0">2  | Read a book    | 0</text>
+  <text x="360" y="304" font-family="Consolas, monospace" font-size="16" fill="#e2e8f0">3  | Write code     | 1</text>
+  <text x="360" y="332" font-family="Consolas, monospace" font-size="16" fill="#fbbf24">3 rows</text>
+</svg>
