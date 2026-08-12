@@ -1,148 +1,148 @@
+require('dotenv').config();
+
 const express = require('express');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const taskRepository = require('./taskRepository');
 
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
-function getDatabasePath() {
-  const preferredPath = path.join(__dirname, 'tasks.db');
-  try {
-    fs.accessSync(__dirname, fs.constants.W_OK);
-    fs.writeFileSync(preferredPath, '');
-    fs.unlinkSync(preferredPath);
-    return preferredPath;
-  } catch (error) {
-    const fallbackDir = path.join(os.tmpdir(), 'flyrank-task-api');
-    fs.mkdirSync(fallbackDir, { recursive: true });
-    return path.join(fallbackDir, 'tasks.db');
-  }
+function sendJSON(res, status, data) {
+  return res.status(status).json(data);
 }
 
-const DB_PATH = getDatabasePath();
-const db = new DatabaseSync(DB_PATH);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0
-  )
-`);
-
-const existingCount = db.prepare('SELECT COUNT(*) AS count FROM tasks').get().count;
-if (existingCount === 0) {
-  const seedTasks = db.prepare('INSERT INTO tasks (title, done) VALUES (?, ?)');
-  seedTasks.run('Buy milk', 0);
-  seedTasks.run('Read a book', 0);
-  seedTasks.run('Write code', 1);
+function asyncHandler(fn) {
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
 
-function mapTask(row) {
-  return row ? { id: row.id, title: row.title, done: Boolean(row.done) } : null;
-}
-
-function getTaskById(id) {
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
-  return mapTask(row);
-}
-
-function getAllTasks() {
-  const rows = db.prepare('SELECT id, title, done FROM tasks ORDER BY id').all();
-  return rows.map(mapTask);
-}
-
-// ===== Stage 0: Hello Server =====
 app.get('/', (req, res) => {
   res.json({ message: 'Hello, server!' });
 });
 
-// ===== Stage 1: Root and Health Endpoints =====
 app.get('/info', (req, res) => {
-  res.json({
+  sendJSON(res, 200, {
     name: 'Task API',
     version: '1.0',
-    endpoints: ['/tasks']
+    endpoints: ['/tasks'],
   });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  sendJSON(res, 200, { status: 'ok' });
 });
 
-// ===== Stage 2: Read Endpoints =====
-app.get('/tasks', (req, res) => {
-  res.json(getAllTasks());
-});
+app.get('/tasks', asyncHandler(async (req, res) => {
+  sendJSON(res, 200, await taskRepository.getAllTasks());
+}));
 
-app.get('/tasks/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const task = getTaskById(id);
+app.get('/tasks/:id', asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const task = await taskRepository.getTaskById(id);
 
   if (!task) {
-    return res.status(404).json({ error: `Task ${id} not found` });
+    return sendJSON(res, 404, { error: `Task ${id} not found` });
   }
 
-  res.json(task);
-});
+  sendJSON(res, 200, task);
+}));
 
-// ===== Stage 3: Create =====
-app.post('/tasks', (req, res) => {
+app.post('/tasks', asyncHandler(async (req, res) => {
   const { title } = req.body;
-
   if (!title || typeof title !== 'string' || title.trim() === '') {
-    return res.status(400).json({ error: 'Title is required and must not be empty' });
+    return sendJSON(res, 400, { error: 'Title is required and must not be empty' });
   }
 
-  const insert = db.prepare('INSERT INTO tasks (title, done) VALUES (?, ?)');
-  const result = insert.run(title.trim(), 0);
-  const newTask = getTaskById(Number(result.lastInsertRowid));
-  res.status(201).json(newTask);
-});
+  const newTask = await taskRepository.createTask(title.trim());
+  sendJSON(res, 201, newTask);
+}));
 
-// ===== Stage 4: Update & Delete =====
-app.put('/tasks/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const existingTask = getTaskById(id);
+app.put('/tasks/:id', asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const existingTask = await taskRepository.getTaskById(id);
 
   if (!existingTask) {
-    return res.status(404).json({ error: `Task ${id} not found` });
+    return sendJSON(res, 404, { error: `Task ${id} not found` });
   }
 
   const { title, done } = req.body;
-
   if (title !== undefined && (typeof title !== 'string' || title.trim() === '')) {
-    return res.status(400).json({ error: 'Title must not be empty' });
+    return sendJSON(res, 400, { error: 'Title must not be empty' });
   }
 
-  if (title !== undefined) {
-    db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run(title.trim(), id);
-  }
+  const updatedTask = await taskRepository.updateTask(id, {
+    title: title !== undefined ? title.trim() : undefined,
+    done: done !== undefined ? Boolean(done) : undefined,
+  });
 
-  if (done !== undefined) {
-    db.prepare('UPDATE tasks SET done = ? WHERE id = ?').run(Boolean(done) ? 1 : 0, id);
-  }
+  sendJSON(res, 200, updatedTask);
+}));
 
-  res.json(getTaskById(id));
-});
+app.delete('/tasks/:id', asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const deleted = await taskRepository.deleteTask(id);
 
-app.delete('/tasks/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const result = db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
-
-  if (result.changes === 0) {
-    return res.status(404).json({ error: `Task ${id} not found` });
+  if (!deleted) {
+    return sendJSON(res, 404, { error: `Task ${id} not found` });
   }
 
   res.status(204).send();
+}));
+
+app.get('/docs', (req, res) => {
+  const swaggerHTML = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Task API - Swagger UI</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@3/swagger-ui.css">
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@3/swagger-ui-bundle.js"></script>
+    <script>
+      const ui = SwaggerUIBundle({
+        url: '/openapi.json',
+        dom_id: '#swagger-ui',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIBundle.SwaggerUIStandalonePreset
+        ],
+        layout: 'BaseLayout'
+      });
+    </script>
+  </body>
+</html>
+  `;
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(swaggerHTML);
 });
 
-app.listen(PORT, () => {
-  console.log(`✓ Task API running on http://localhost:${PORT}`);
-  console.log(`✓ Database file: ${DB_PATH}`);
-  console.log(`✓ Swagger UI at http://localhost:${PORT}/docs`);
+app.get('/openapi.json', (req, res) => {
+  const openapi = fs.readFileSync(path.join(__dirname, 'openapi.json'), 'utf-8');
+  res.setHeader('Content-Type', 'application/json');
+  res.send(openapi);
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  sendJSON(res, 500, { error: 'Internal server error' });
+});
+
+async function main() {
+  await taskRepository.initialize();
+  app.listen(PORT, () => {
+    console.log(`✓ Task API running on http://localhost:${PORT}`);
+    console.log(`✓ Using repository: ${process.env.TASKS_REPOSITORY || 'postgres'}`);
+  });
+}
+
+main().catch((error) => {
+  console.error('Failed to start server', error);
+  process.exit(1);
 });

@@ -1,34 +1,76 @@
-# Task API with SQLite Persistence
+# Task API with Postgres Persistence
 
-A CRUD API for managing tasks where the storage layer now lives in a real SQLite database instead of an in-memory array. The API surface stays the same, but data survives server restarts.
+This repository now runs the Task API against a real Postgres database in Docker.
+The storage layer is isolated behind a repository interface, so the service and the HTTP routes do not need to change when the backing database changes.
 
-## Why SQLite was chosen
+## What changed
 
-SQLite is a lightweight, file-based database that requires no separate server process. It is ideal for small projects and local development, and it fits this assignment perfectly because the database lives in a single file: `tasks.db`.
+- added `docker-compose.yml` to start the app and Postgres together
+- added `Dockerfile` so `docker compose up --build` builds the Node app image
+- moved storage access into `taskRepository.js`
+- implemented a Postgres repository in `postgresTaskRepository.js`
+- added `init.sql` to create the `tasks` table when Postgres starts
+- added `.env.example` so local connection settings are documented and the real `.env` stays ignored
 
-## Quick Start
+## Run the full stack
+
+1. Copy `.env.example` to `.env`
+2. Start the stack:
 
 ```bash
-npm start
+docker compose up --build
 ```
 
-The API will start on http://localhost:3000 and automatically create `tasks.db` if it does not already exist.
+The app will be available at http://localhost:3000.
 
-### First Run Behavior
+## Environment variables
 
-On the first launch, the server will:
+Copy `.env.example` to `.env`, then edit if needed.
 
-- create the `tasks` table if it does not exist
-- insert three example tasks if the table is empty
+`.env.example` contains:
 
-## Features
+```text
+DATABASE_URL=postgres://postgres:postgres@db:5432/tasks
+```
 
-- ✅ Full CRUD operations over the same endpoints as Assignment 1
-- ✅ Persistent storage in SQLite
-- ✅ Proper HTTP status codes (200, 201, 204, 400, 404)
-- ✅ Input validation for task titles
-- ✅ Swagger UI at `/docs` for interactive testing
-- ✅ OpenAPI 3.0 specification
+## Persistence proof
+
+1. Start the stack:
+
+```bash
+docker compose up --build -d
+```
+
+2. Create tasks:
+
+```bash
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Persisted task"}'
+```
+
+3. Confirm the task exists:
+
+```bash
+curl http://localhost:3000/tasks
+```
+
+4. Restart the stack:
+
+```bash
+docker compose down
+```
+```bash
+docker compose up -d
+```
+
+5. Confirm the task still exists:
+
+```bash
+curl http://localhost:3000/tasks
+```
+
+The same task remains after the Postgres container restarts because the database uses a named Docker volume (`db-data`).
 
 ## API Endpoints
 
@@ -43,71 +85,38 @@ On the first launch, the server will:
 | PUT | `/tasks/:id` | Update task | 200, 400, 404 |
 | DELETE | `/tasks/:id` | Delete task | 204, 404 |
 
-## Database File
+## Storage layering
 
-The database file is stored at the project root as `tasks.db`.
+The HTTP service code in `server.js` uses `taskRepository.js` for all CRUD operations.
+By default that module loads `postgresTaskRepository.js`, so the service and routes do not know the storage details.
 
-If you delete the file, the server will create it again on the next start, but the previous data will be lost.
-
-## Example Requests
-
-### Get all tasks
+If you want to run an in-memory repository instead, set:
 
 ```bash
-curl -i http://localhost:3000/tasks
+TASKS_REPOSITORY=memory
 ```
 
-### Create a new task
-
-```bash
-curl -i -X POST http://localhost:3000/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Learn Node.js"}'
-```
-
-### Update a task
-
-```bash
-curl -i -X PUT http://localhost:3000/tasks/1 \
-  -H "Content-Type: application/json" \
-  -d '{"done":true}'
-```
-
-### Delete a task
-
-```bash
-curl -i -X DELETE http://localhost:3000/tasks/1
-```
-
-## Example SQL Queries
-
-The following queries were used while exploring the database:
-
-```sql
-SELECT * FROM tasks;
-SELECT * FROM tasks WHERE done = 1;
-SELECT COUNT(*) FROM tasks;
-```
-
-## Database Viewer Screenshot
-
-![SQLite database viewer screenshot](database-viewer.svg)
-
-## Project Structure
+## Project structure
 
 ```text
 .
-├── server-builtin.js    # Main HTTP server using SQLite
-├── server.js            # Express-based variant using SQLite
-├── openapi.json         # OpenAPI 3.0 specification
-├── package.json         # npm metadata
-├── tasks.db             # SQLite database file (created automatically)
-├── database-viewer.svg  # Screenshot example for the README
-└── README.md            # This file
+├── Dockerfile
+├── README.md
+├── docker-compose.yml
+├── init.sql
+├── openapi.json
+├── package.json
+├── .env.example
+├── .dockerignore
+├── server-builtin.js
+├── server.js
+├── taskRepository.js
+├── postgresTaskRepository.js
+└── memoryTaskRepository.js
 ```
 
 ## Notes
 
-- The API remains compatible with the same CRUD endpoints from Assignment 1.
-- Tasks are stored in a `tasks` table with `id`, `title`, and `done` columns.
-- Data persists across restarts because it is written to `tasks.db`.
+- The app uses `DATABASE_URL` from `.env` to connect to Postgres.
+- The Docker Compose file keeps Postgres data in `db-data` so rows survive container restarts.
+- The Postgres initialization SQL is in `init.sql`.
