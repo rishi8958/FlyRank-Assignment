@@ -1,122 +1,123 @@
-# Task API with Postgres Persistence
+# Task API — Auth, Postgres & Docker
 
-This repository now runs the Task API against a real Postgres database in Docker.
-The storage layer is isolated behind a repository interface, so the service and the HTTP routes do not need to change when the backing database changes.
+A Node.js/Express REST API with Supabase JWT authentication, Postgres persistence, and Swagger UI.
 
-## What changed
+## Stack
 
-- added `docker-compose.yml` to start the app and Postgres together
-- added `Dockerfile` so `docker compose up --build` builds the Node app image
-- moved storage access into `taskRepository.js`
-- implemented a Postgres repository in `postgresTaskRepository.js`
-- added `init.sql` to create the `tasks` table when Postgres starts
-- added `.env.example` so local connection settings are documented and the real `.env` stays ignored
+- **Express** — HTTP server
+- **Supabase Auth** — Identity Provider (signup, login, JWT issuance & verification)
+- **Postgres** (Docker) — persistent task storage
+- **Swagger UI** — interactive API docs at `/docs`
 
-## Run the full stack
+## Local setup
 
-1. Copy `.env.example` to `.env`
-2. Start the stack:
+### 1. Clone and install
+
+```bash
+git clone https://github.com/rishi8958/FlyRank-Assignment
+cd FlyRank-Assignment
+npm install
+```
+
+### 2. Environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your values:
+
+```
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_KEY=your-anon-public-key
+DATABASE_URL=postgres://postgres:postgres@db:5432/tasks
+PORT=3000
+```
+
+Get `SUPABASE_URL` and `SUPABASE_KEY` from your Supabase Dashboard → Project Settings → API.
+
+### 3. Run with Docker (app + Postgres)
 
 ```bash
 docker compose up --build
 ```
 
-The app will be available at http://localhost:3000.
+### 4. Run locally (without Docker, memory repo)
 
-## Environment variables
-
-Copy `.env.example` to `.env`, then edit if needed.
-
-`.env.example` contains:
-
-```text
-DATABASE_URL=postgres://postgres:postgres@db:5432/tasks
+```bash
+TASKS_REPOSITORY=memory npm start
 ```
+
+## API reference
+
+| Method | Endpoint | Auth required | Description | Success |
+|--------|----------|:---:|-------------|---------|
+| POST | `/auth/signup` | ✗ | Create account | 201 |
+| POST | `/auth/login` | ✗ | Login, returns JWT | 200 |
+| POST | `/auth/logout` | ✓ | Invalidate session | 204 |
+| GET | `/public/info` | ✗ | Public message | 200 |
+| GET | `/protected/profile` | ✓ | Authenticated user info | 200 |
+| GET | `/protected/dashboard` | ✓ | User dashboard | 200 |
+| GET | `/tasks` | ✗ | List all tasks | 200 |
+| GET | `/tasks/:id` | ✗ | Get task by ID | 200 |
+| POST | `/tasks` | ✗ | Create task | 201 |
+| PUT | `/tasks/:id` | ✗ | Update task | 200 |
+| DELETE | `/tasks/:id` | ✗ | Delete task | 204 |
+| GET | `/health` | ✗ | Health check | 200 |
+
+**Status codes:** `201` signup/create · `200` read/login · `204` logout/delete · `400` bad input · `401` missing/invalid token · `404` not found
+
+## Auth flow
+
+```
+Client                    Backend                  Supabase
+  |                          |                        |
+  |-- POST /auth/signup ----->|-- signUp() ----------->|
+  |<-- 201 { user } ---------|<-- user object ---------|
+  |                          |                        |
+  |-- POST /auth/login ------>|-- signInWithPassword()->|
+  |<-- 200 { access_token } --|<-- session ------------|
+  |                          |                        |
+  |-- GET /protected/profile  |                        |
+  |   Authorization: Bearer <token>                    |
+  |-------------------------->|-- getUser(token) ------>|
+  |<-- 200 { id, email } -----|<-- user object ---------|
+```
+
+## Swagger UI
+
+Visit `http://localhost:3000/docs`, click **Authorize**, paste your `access_token` from `/auth/login`, then use **Try it out** on any protected route.
+
+![Swagger UI showing lock icons on protected routes](./swagger-screenshot.png)
 
 ## Persistence proof
 
-1. Start the stack:
-
 ```bash
 docker compose up --build -d
-```
-
-2. Create tasks:
-
-```bash
-curl -X POST http://localhost:3000/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Persisted task"}'
-```
-
-3. Confirm the task exists:
-
-```bash
-curl http://localhost:3000/tasks
-```
-
-4. Restart the stack:
-
-```bash
+curl -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Persisted task"}'
+curl http://localhost:3000/tasks          # task appears
 docker compose down
-```
-```bash
 docker compose up -d
+curl http://localhost:3000/tasks          # task still there
 ```
 
-5. Confirm the task still exists:
-
-```bash
-curl http://localhost:3000/tasks
-```
-
-The same task remains after the Postgres container restarts because the database uses a named Docker volume (`db-data`).
-
-## API Endpoints
-
-| Method | Endpoint | Description | Status Codes |
-|--------|----------|-------------|--------------|
-| GET | `/` | Hello server message | 200 |
-| GET | `/health` | Health check | 200 |
-| GET | `/info` | API information | 200 |
-| GET | `/tasks` | List all tasks | 200 |
-| GET | `/tasks/:id` | Get single task | 200, 404 |
-| POST | `/tasks` | Create new task | 201, 400 |
-| PUT | `/tasks/:id` | Update task | 200, 400, 404 |
-| DELETE | `/tasks/:id` | Delete task | 204, 404 |
-
-## Storage layering
-
-The HTTP service code in `server.js` uses `taskRepository.js` for all CRUD operations.
-By default that module loads `postgresTaskRepository.js`, so the service and routes do not know the storage details.
-
-If you want to run an in-memory repository instead, set:
-
-```bash
-TASKS_REPOSITORY=memory
-```
+Data survives restarts because Postgres uses a named Docker volume (`db-data`).
 
 ## Project structure
 
-```text
-.
-├── Dockerfile
-├── README.md
-├── docker-compose.yml
-├── init.sql
-├── openapi.json
-├── package.json
-├── .env.example
-├── .dockerignore
-├── server-builtin.js
-├── server.js
-├── taskRepository.js
-├── postgresTaskRepository.js
-└── memoryTaskRepository.js
 ```
-
-## Notes
-
-- The app uses `DATABASE_URL` from `.env` to connect to Postgres.
-- The Docker Compose file keeps Postgres data in `db-data` so rows survive container restarts.
-- The Postgres initialization SQL is in `init.sql`.
+.
+├── server.js                  # Express app — all routes
+├── supabaseClient.js          # Supabase singleton
+├── middleware/
+│   └── auth.js                # requireAuth middleware
+├── taskRepository.js          # selects memory or postgres
+├── postgresTaskRepository.js  # Postgres implementation
+├── memoryTaskRepository.js    # In-memory implementation
+├── init.sql                   # CREATE TABLE tasks
+├── openapi.json               # OpenAPI 3.0 spec
+├── docker-compose.yml         # app + db
+├── Dockerfile
+├── .env.example               # committed template
+└── .env                       # gitignored — your secrets
+```
