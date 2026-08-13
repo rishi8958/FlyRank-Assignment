@@ -1,34 +1,109 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Task API",
-    "version": "1.0.0",
-    "description": "A simple CRUD API for managing tasks with in-memory storage"
+    "title": "Task API with Auth",
+    "version": "2.0.0",
+    "description": "Task CRUD API secured with Supabase JWT authentication"
   },
-  "servers": [
-    {
-      "url": "http://localhost:3000",
-      "description": "Development server"
+  "servers": [{ "url": "http://localhost:3000", "description": "Development server" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string", "example": "Access token required" } }
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "title": { "type": "string", "example": "Buy milk" },
+          "done": { "type": "boolean", "example": false }
+        },
+        "required": ["id", "title", "done"]
+      },
+      "Credentials": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email", "example": "user@example.com" },
+          "password": { "type": "string", "example": "password123" }
+        }
+      }
     }
-  ],
+  },
   "paths": {
-    "/": {
-      "get": {
-        "summary": "Hello endpoint",
-        "tags": ["General"],
+    "/auth/signup": {
+      "post": {
+        "summary": "Create a new user account",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Credentials" } } }
+        },
+        "responses": {
+          "201": { "description": "User created" },
+          "400": { "description": "Missing fields or Supabase error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate and receive JWT",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Credentials" } } }
+        },
         "responses": {
           "200": {
-            "description": "Server is running",
+            "description": "Login successful",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Hello, server!"
-                    }
+                    "access_token": { "type": "string" },
+                    "refresh_token": { "type": "string" }
                   }
+                }
+              }
+            }
+          },
+          "400": { "description": "Missing fields" },
+          "401": { "description": "Invalid credentials", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Terminate user session",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "204": { "description": "Logged out" },
+          "401": { "description": "Missing or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/public/info": {
+      "get": {
+        "summary": "Public endpoint — no auth required",
+        "tags": ["Public"],
+        "responses": {
+          "200": {
+            "description": "Public message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "message": { "type": "string", "example": "Welcome stranger! This info is public." } }
                 }
               }
             }
@@ -36,62 +111,39 @@
         }
       }
     },
-    "/health": {
+    "/protected/profile": {
       "get": {
-        "summary": "Health check endpoint",
-        "tags": ["General"],
+        "summary": "Get authenticated user profile",
+        "tags": ["Protected"],
+        "security": [{ "bearerAuth": [] }],
         "responses": {
           "200": {
-            "description": "Server is healthy",
+            "description": "User profile",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": {
-                      "type": "string",
-                      "example": "ok"
-                    }
+                    "id": { "type": "string" },
+                    "email": { "type": "string" },
+                    "created_at": { "type": "string" }
                   }
                 }
               }
             }
-          }
+          },
+          "401": { "description": "Missing or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
-    "/info": {
+    "/protected/dashboard": {
       "get": {
-        "summary": "API information",
-        "tags": ["General"],
+        "summary": "Get authenticated user dashboard",
+        "tags": ["Protected"],
+        "security": [{ "bearerAuth": [] }],
         "responses": {
-          "200": {
-            "description": "API details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "example": "Task API"
-                    },
-                    "version": {
-                      "type": "string",
-                      "example": "1.0"
-                    },
-                    "endpoints": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "example": ["/tasks"]
-                    }
-                  }
-                }
-              }
-            }
-          }
+          "200": { "description": "Dashboard message" },
+          "401": { "description": "Missing or invalid token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -99,239 +151,60 @@
       "get": {
         "summary": "Get all tasks",
         "tags": ["Tasks"],
-        "responses": {
-          "200": {
-            "description": "List of all tasks",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Task"
-                  }
-                }
-              }
-            }
-          }
-        }
+        "responses": { "200": { "description": "List of tasks", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Task" } } } } } }
       },
       "post": {
-        "summary": "Create a new task",
+        "summary": "Create a task",
         "tags": ["Tasks"],
         "requestBody": {
           "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["title"],
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "description": "Task title (required, must not be empty)",
-                    "example": "Buy milk"
-                  }
-                }
-              }
-            }
-          }
+          "content": { "application/json": { "schema": { "type": "object", "required": ["title"], "properties": { "title": { "type": "string", "example": "Buy milk" } } } } }
         },
         "responses": {
-          "201": {
-            "description": "Task created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Task"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request - title is missing or empty",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
+          "201": { "description": "Task created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Task" } } } },
+          "400": { "description": "Invalid input", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
     "/tasks/{id}": {
       "get": {
-        "summary": "Get a single task by ID",
+        "summary": "Get task by ID",
         "tags": ["Tasks"],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            },
-            "description": "Task ID"
-          }
-        ],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
-          "200": {
-            "description": "Task found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Task"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Task not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
+          "200": { "description": "Task found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Task" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       },
       "put": {
-        "summary": "Update a task",
+        "summary": "Update task",
         "tags": ["Tasks"],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            },
-            "description": "Task ID"
-          }
-        ],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "requestBody": {
           "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "description": "Updated task title",
-                    "example": "Buy milk and bread"
-                  },
-                  "done": {
-                    "type": "boolean",
-                    "description": "Whether the task is completed",
-                    "example": true
-                  }
-                }
-              }
-            }
-          }
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "title": { "type": "string" }, "done": { "type": "boolean" } } } } }
         },
         "responses": {
-          "200": {
-            "description": "Task updated successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Task"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request - title is empty",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Task not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Task" } } } },
+          "400": { "description": "Invalid input", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       },
       "delete": {
-        "summary": "Delete a task",
+        "summary": "Delete task",
         "tags": ["Tasks"],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            },
-            "description": "Task ID"
-          }
-        ],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
-          "204": {
-            "description": "Task deleted successfully (no content)"
-          },
-          "404": {
-            "description": "Task not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
+          "204": { "description": "Deleted" },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Task": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "description": "Unique task identifier",
-            "example": 1
-          },
-          "title": {
-            "type": "string",
-            "description": "Task title",
-            "example": "Buy milk"
-          },
-          "done": {
-            "type": "boolean",
-            "description": "Whether the task is completed",
-            "example": false
-          }
-        },
-        "required": ["id", "title", "done"]
-      },
-      "Error": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string",
-            "description": "Error message",
-            "example": "Task 99 not found"
-          }
-        }
-      }
+    },
+    "/": {
+      "get": { "summary": "Hello", "tags": ["General"], "responses": { "200": { "description": "OK" } } }
+    },
+    "/health": {
+      "get": { "summary": "Health check", "tags": ["General"], "responses": { "200": { "description": "OK" } } }
     }
   }
 }
